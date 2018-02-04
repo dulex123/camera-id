@@ -147,7 +147,7 @@ class CIDDataset():
         # Create validation set
         h5val_file = h5py.File(os.path.join(output_folder, "val.hdf5"))
         h5val_file.create_dataset("patches", val_shape, np.int8)
-        h5val_file.create_dataset("labels", data=np.array(val_y))
+        h5val_file.create_dataset("labels", data=np.repeat(val_y, newly_gen))
         for i, filepath in enumerate(val_x):
             patches = self.patches_from_img(filepath, num_patches, mods)
             sind = i*newly_gen
@@ -165,7 +165,7 @@ class CIDDataset():
         # Create train set
         h5train_file = h5py.File(os.path.join(output_folder, "train.hdf5"))
         h5train_file.create_dataset("patches", train_shape, np.int8)
-        h5train_file.create_dataset("labels", data=np.array(train_y))
+        h5train_file.create_dataset("labels", data=np.repeat(train_y,newly_gen))
         for i, filepath in enumerate(train_x):
             patches = self.patches_from_img(filepath, num_patches, mods)
             sind = i*newly_gen
