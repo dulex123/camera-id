@@ -36,8 +36,6 @@ class PretrainedNNs:
         for i, layer in enumerate(self.model.layers):
             print(i, layer.name)
 
-
-        exit()
         os.makedirs("weights", exist_ok=True)
         weights_filepath = "weights/"+self.model_name+".hdf5"
 
