@@ -24,6 +24,37 @@ from keras.utils import Sequence
 #                for file_name in batch_x]), np.array(batch_y)
 
 
+class AugPatchDataset(Sequence):
+    def __init__(self, hdf5_filepath, batch_size):
+        self.h5file = h5py.File(hdf5_filepath, "r")
+        self.num_class = 10
+        self.batch_size = batch_size
+        self.num = self.h5file["patches"].shape[0]
+        # self.hdf5_train_indxs = [x for x in range(self.num)]
+        # shuffle(self.hdf5_train_indxs)
+        # print(self.hdf5_train_indxs)
+        # print(self.h5file["patches"][self.hdf5_train_indxs[0:10]].shape)
+
+
+    def __len__(self):
+        return self.num // self.batch_size
+
+    def one_hot(self, batch_y):
+        one_hot_y = np.zeros((self.batch_size, self.num_class))
+        one_hot_y[np.arange(self.batch_size), batch_y] = 1
+        return one_hot_y
+
+    def __getitem__(self, idx):
+        start = idx*self.batch_size
+        end = (idx+1)*self.batch_size
+        batch_x = self.h5file["patches"][start:end, ...]
+        batch_y = self.one_hot(self.h5file["labels"][start:end])
+        return batch_x, batch_y
+
+    def on_epoch_end(self):
+        pass
+
+
 class SinglePatchDataset(Sequence):
     def __init__(self, hdf5_filepath, batch_size):
         self.h5file = h5py.File(hdf5_filepath, "r")
@@ -115,7 +146,6 @@ class CIDDataset():
         # TODO: Implement other augmentations
         return patch_aug
 
-
     def patches_from_img(self, filepath, num_patches, mods, patch_sz=512):
         num_mods = len(mods)
         img = cv2.cvtColor(cv2.imread(filepath), cv2.COLOR_BGR2RGB)/255
@@ -135,7 +165,7 @@ class CIDDataset():
 
     def aug_patch_dataset(self, output_folder):
         patch_sz = 512
-        num_patches = 1
+        num_patches = 10
         mods = ["original"]
         # mods = ["original", "gamma0.8", "gamma1.2"]
         newly_gen = len(mods) * num_patches
@@ -158,8 +188,6 @@ class CIDDataset():
             # for i in range(augs.shape[0]):
             #     cv2.imwrite(str(i)+"img.jpg", augs[i])
             #patches = self.patches_from_img(filepath_x, 5, mods)
-
-            break
         h5val_file.close()
 
         # Create train set
