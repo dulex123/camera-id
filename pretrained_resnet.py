@@ -3,7 +3,7 @@ import os
 import keras
 from keras.applications import InceptionV3
 from keras.engine import Model
-from keras.optimizers import Adam
+from keras.optimizers import Adam, RMSprop, SGD
 from keras.models import Sequential
 from dataset import SinglePatchDataset
 from dataset import AugPatchDataset
@@ -32,6 +32,12 @@ class PretrainedNNs:
             exit()
 
     def train(self):
+
+        for i, layer in enumerate(self.model.layers):
+            print(i, layer.name)
+
+
+        exit()
         os.makedirs("weights", exist_ok=True)
         weights_filepath = "weights/"+self.model_name+".hdf5"
 
@@ -52,6 +58,21 @@ class PretrainedNNs:
             write_graph=True,
             write_images=False)
 
+
+        # Train head
+        self.model.fit_generator(self.dataset, len(self.dataset), epochs=25,
+                                 validation_data=self.val_dataset,
+                                 validation_steps=len(self.val_dataset),
+                                 callbacks=[checkpointer, tensorboard, rlrop])
+
+        for layer in self.model.layers[:284]:
+            layer.trainable=False
+        for layer in self.model.layers[284:]:
+            layer.trainable=True
+
+        # Fine tune
+        self.model.compile(optimizer=SGD(lr=0.0001, momentum=0.9),
+                                              loss='categorical_crossentropy')
         self.model.fit_generator(self.dataset, len(self.dataset), epochs=25,
                                  validation_data=self.val_dataset,
                                  validation_steps=len(self.val_dataset),
@@ -71,13 +92,15 @@ class PretrainedNNs:
         self.model_name = "inceptionNet"
         base_model = InceptionV3(weights='imagenet', include_top=False,
                                  input_shape=self.data_shape)
+        for layer in base_model.layers:
+            layer.trainable = False
         outputs = base_model.get_layer("activation_91").output
         print("INPUT", base_model.input_shape)
         x = Flatten()(outputs)
         x = Dense(1024, activation='relu')(x)
         x = Dense(10, activation='softmax')(x)
         model = Model(inputs=base_model.inputs, outputs=x)
-        optimizer = Adam(lr=0.001)
+        optimizer = RMSprop(lr=0.001)
         model.compile(loss='categorical_crossentropy',
                       optimizer=optimizer,
                       metrics=['accuracy'])
