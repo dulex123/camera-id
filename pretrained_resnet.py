@@ -90,10 +90,11 @@ class PretrainedNNs:
         self.model_name = "inceptionNet"
         base_model = InceptionV3(weights='imagenet', include_top=False,
                                  input_shape=self.data_shape)
+
         for layer in base_model.layers:
             layer.trainable = False
-        outputs = base_model.get_layer("activation_91").output
-        print("INPUT", base_model.input_shape)
+
+        outputs = base_model.outputs
         x = Flatten()(outputs)
         x = Dense(1024, activation='relu')(x)
         x = Dense(10, activation='softmax')(x)
