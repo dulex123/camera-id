@@ -78,13 +78,27 @@ class PretrainedNNs:
 
     def get_resnet(self):
         self.model_name = "resnet"
-        # model = ResNet50(weights='imagenet')
-        # preds = model.predict(x)
+        base_model = ResNet50(weights='imagenet', include_top=False,
+                              input_shape=self.data_shape)
+        for layer in base_model.layers:
+            print(layer.name)
+            layer.trainable = False
+
+        outputs = base_model.outputs
+        x = Flatten()(outputs)
+        x = Dense(1024, activation='relu')(x)
+        x = Dense(10, activation='softmax')(x)
+        model = Model(inputs=base_model.inputs, outputs=x)
+        optimizer = RMSprop(lr=0.001)
+        model.compile(loss='categorical_crossentropy',
+                      optimizer=optimizer,
+                      metrics=['accuracy'])
+
+        return model
         # decode the results into a list of tuples (class, description, probability)
         # (one such list for each sample in the batch)
         # print('Predicted:', decode_predictions(preds, top=3)[0])
         # Predicted: [(u'n02504013', u'Indian_elephant', 0.82658225), (u'n01871265', u'tusker', 0.1122357), (u'n02504458', u'African_elephant', 0.061040461)]
-        return model
 
     def get_inceptionNet(self):
         self.model_name = "inceptionNet"
@@ -110,9 +124,9 @@ class PretrainedNNs:
 
 
 if __name__ == "__main__":
-    train_gen = AugPatchDataset("data/aug_patch/train.hdf5", 2)
-    val_gen = AugPatchDataset("data/aug_patch/val.hdf5", 2)
-    model = PretrainedNNs(train_gen, val_gen, "inception")
+    train_gen = AugPatchDataset("data/aug_patch/train.hdf5", 1)
+    val_gen = AugPatchDataset("data/aug_patch/val.hdf5", 1)
+    model = PretrainedNNs(train_gen, val_gen, "resnet")
     model.train()
     # train_gen = SinglePatchDataset("data/single_patch/train.hdf5", 2)
     # val_gen = SinglePatchDataset("data/single_patch/val.hdf5", 2)
