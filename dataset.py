@@ -1,8 +1,14 @@
 import os
 import cv2
 import h5py
+import tqdm
 import numpy as np
+from io import BytesIO
 from random import shuffle
+import jpeg4py as jpeg
+import tqdm as tqdm
+
+from PIL import Image
 from skimage import exposure
 from keras.utils import Sequence
 
@@ -34,7 +40,6 @@ class AugPatchDataset(Sequence):
         # shuffle(self.hdf5_train_indxs)
         # print(self.hdf5_train_indxs)
         # print(self.h5file["patches"][self.hdf5_train_indxs[0:10]].shape)
-
 
     def __len__(self):
         return self.num // self.batch_size
@@ -134,13 +139,37 @@ class CIDDataset():
             patch_aug[ind, :, :, :] = patch
             ind += 1
         if "gamma0.8" in mods:
-            bla = exposure.adjust_gamma(patch, 0.8)
-            patch_aug[ind, :, :, :] = bla
+            ptch = exposure.adjust_gamma(patch, 0.8)
+            patch_aug[ind, :, :, :] = ptch
             ind += 1
         if "gamma1.2" in mods:
             patch_aug[ind, :, :, :] = exposure.adjust_gamma(patch, 1.2)
             ind += 1
+        if "jpg70" in mods:
+            out = BytesIO()
+            im = Image.fromarray(patch)
+            im.save(out, format='jpeg', quality=70)
+            im_decoded = jpeg.JPEG(
+                np.frombuffer(out.getvalue(), dtype=np.uint8)).decode()
+            patch_aug[ind, :, :, :] = im_decoded
+            ind += 1
+            del out
+            del im
+        if "jpg90" in mods:
+            out = BytesIO()
+            im = Image.fromarray(patch)
+            im.save(out, format='jpeg', quality=90)
+            im_decoded = jpeg.JPEG(
+                np.frombuffer(out.getvalue(), dtype=np.uint8)).decode()
+            patch_aug[ind, :, :, :] = im_decoded
+            ind += 1
+            del out
+            del im
 
+        # import matplotlib.pyplot as plt
+        # for img in range(patch_aug.shape[0]):
+        #     plt.imshow(patch_aug[img]/255)
+        #     plt.show()
         # TODO: Implement other augmentations
         return patch_aug
 
@@ -157,25 +186,27 @@ class CIDDataset():
             x, y = patch_x_ind[num], patch_y_ind[num]
             sind = num*num_mods
             eind = sind+num_mods
-            patches[sind:eind, :, :, :] = img[y:y+patch_sz, x:x+patch_sz, :]
+            patches[sind:eind, :, :, :] = self.augment_patch(img[y:y+patch_sz,
+                                          x:x+patch_sz, :], patch_sz, mods)
 
         return patches
 
     def aug_patch_dataset(self, output_folder):
         patch_sz = 512
-        num_patches = 10
-        mods = ["original"]
-        # mods = ["original", "gamma0.8", "gamma1.2"]
+        num_patches = 7
+        mods = ["original", "gamma0.8", "gamma1.2", "jpg70", "jpg90"]
         newly_gen = len(mods) * num_patches
         train_x, train_y, val_x, val_y = self.shuffle_data()
         train_shape = (len(train_x)*newly_gen, patch_sz, patch_sz, 3)
         val_shape = (len(val_x)*newly_gen, patch_sz, patch_sz, 3)
 
         # Create validation set
+        tq = tqdm.tqdm(desc="Val data:", total=len(val_x))
         h5val_file = h5py.File(os.path.join(output_folder, "val.hdf5"))
-        h5val_file.create_dataset("patches", val_shape, np.int8)
+        h5val_file.create_dataset("patches", val_shape, np.uint8)
         h5val_file.create_dataset("labels", data=np.repeat(val_y, newly_gen))
         for i, filepath in enumerate(val_x):
+            tq.update(1)
             patches = self.patches_from_img(filepath, num_patches, mods)
             sind = i*newly_gen
             eind = sind+newly_gen
@@ -186,17 +217,21 @@ class CIDDataset():
             #     cv2.imwrite(str(i)+"img.jpg", augs[i])
             #patches = self.patches_from_img(filepath_x, 5, mods)
         h5val_file.close()
+        tq.close()
 
         # Create train set
+        tq = tqdm.tqdm(desc="Train data:", total=len(train_x))
         h5train_file = h5py.File(os.path.join(output_folder, "train.hdf5"))
-        h5train_file.create_dataset("patches", train_shape, np.int8)
+        h5train_file.create_dataset("patches", train_shape, np.uint8)
         h5train_file.create_dataset("labels", data=np.repeat(train_y,newly_gen))
         for i, filepath in enumerate(train_x):
+            tq.update(1)
             patches = self.patches_from_img(filepath, num_patches, mods)
             sind = i*newly_gen
             eind = sind+newly_gen
             h5train_file["patches"][sind:eind, ...] = patches
         h5train_file.close()
+        tq.close()
 
     def single_patch_dataset(self, output_folder):
 
@@ -224,21 +259,17 @@ class CIDDataset():
         h5train_file.close()
 
         # Parallel(n_jobs=4)(delayed(self.patches_from_img)(filepath, 3) for
-        #     filepath in self.x_filenames)
-            # bla.append(patches)
-            # print(i)
-            # i+=1
 
 
 if __name__ == "__main__":
-    dataset = CIDDataset("data/vanilla/train")
-    dataset.aug_patch_dataset("data/aug_patch")
+    #dataset = CIDDataset("data/vanilla/train")
+    #dataset.aug_patch_dataset("data/test")
+
     #dataset.single_patch_dataset("data/single_patch")
+    #SinglePatchDataset("data/single_patch/train.hdf5", 16)
+    # a = AugPatchDataset("data/test/val.hdf5", 16)
+    # import matplotlib.pyplot as plt
+    # for img in range(a[2][0].shape[0]):
+    #     plt.imshow(a[3][0][img])
+    #     plt.show()
 
-    # a = SinglePatchDataset("data/single_patch/train.hdf5", 16)
-    # x, y = a[4]
-    # for c in range(len(a)):
-    #     x, y = a[c]
-    #     print(x.shape)
-
-    print("ende")

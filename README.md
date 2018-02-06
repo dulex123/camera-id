@@ -12,7 +12,7 @@ Finest camera identification in town!
   - Research discussions / Papers on arxiv / Blogs / Other datasets
 
 
-## Dataset download
+## RAW Dataset download
 
 Download to your project directory, add it, and commit.
 
@@ -28,7 +28,12 @@ mv test ../data/
 mv train ../data/
 ```
 
-
+## Derivative datasets generation
+```
+# Install requirements
+sudo apt-get install libturbojpeg
+sudo pip3 install cffi tqdm
+```
 ## Usage
 
 
