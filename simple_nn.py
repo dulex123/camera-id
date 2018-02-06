@@ -89,7 +89,7 @@ class SimpleNN():
 
 
 if __name__ == "__main__":
-    train_gen = SinglePatchDataset("data/single_patch/train.hdf5", 2)
-    val_gen = SinglePatchDataset("data/single_patch/val.hdf5", 2)
+    train_gen = SinglePatchDataset("data/single_patch/train.hdf5", 16)
+    val_gen = SinglePatchDataset("data/single_patch/val.hdf5", 16)
     model = SimpleNN(train_gen, val_gen, "fcn")
     model.train()

@@ -47,7 +47,7 @@ class AugPatchDataset(Sequence):
     def __getitem__(self, idx):
         start = idx*self.batch_size
         end = (idx+1)*self.batch_size
-        batch_x = self.h5file["patches"][start:end, ...]
+        batch_x = self.h5file["patches"][start:end, ...]/255
         batch_y = self.one_hot(self.h5file["labels"][start:end])
         return batch_x, batch_y
 
@@ -61,7 +61,7 @@ class SinglePatchDataset(Sequence):
         self.num_class = 10
         self.batch_size = batch_size
         self.num = self.h5file["patches"].shape[0]
-        print(self.num)
+        #print(self.num)
 
     def __len__(self):
         return self.num // self.batch_size
@@ -74,7 +74,7 @@ class SinglePatchDataset(Sequence):
     def __getitem__(self, idx):
         start = idx*self.batch_size
         end = (idx+1)*self.batch_size
-        batch_x = self.h5file["patches"][start:end, ...]
+        batch_x = self.h5file["patches"][start:end, ...]/255
         batch_y = self.one_hot(self.h5file["labels"][start:end])
         return batch_x, batch_y
 
@@ -99,14 +99,12 @@ class CIDDataset():
             self.categories[label] = os.path.basename(root)
             label += 1
 
-        print(self.categories)
-        print(self.x_filenames)
+        #print(self.categories)
+        #print(self.x_filenames)
         self.i = 0
 
-
-
     def center_patch(self, filepath, patch_sz=512):
-        img = cv2.cvtColor(cv2.imread(filepath), cv2.COLOR_BGR2RGB)/255
+        img = cv2.cvtColor(cv2.imread(filepath), cv2.COLOR_BGR2RGB)
         img_h, img_w, channels = img.shape
         x = img_h//2-patch_sz//2
         y = img_w//2-patch_sz//2
@@ -148,7 +146,7 @@ class CIDDataset():
 
     def patches_from_img(self, filepath, num_patches, mods, patch_sz=512):
         num_mods = len(mods)
-        img = cv2.cvtColor(cv2.imread(filepath), cv2.COLOR_BGR2RGB)/255
+        img = cv2.cvtColor(cv2.imread(filepath), cv2.COLOR_BGR2RGB)
         img_h, img_w, channels = img.shape
         patches = np.zeros([num_patches*num_mods, patch_sz, patch_sz, channels])
         patch_x_ind = np.random.randint(0, img_w-patch_sz, num_patches,
@@ -159,7 +157,7 @@ class CIDDataset():
             x, y = patch_x_ind[num], patch_y_ind[num]
             sind = num*num_mods
             eind = sind+num_mods
-            patches[sind:eind, :, :, :] = img[y:y+patch_sz, x:x+patch_sz :]
+            patches[sind:eind, :, :, :] = img[y:y+patch_sz, x:x+patch_sz, :]
 
         return patches
 
@@ -169,7 +167,6 @@ class CIDDataset():
         mods = ["original"]
         # mods = ["original", "gamma0.8", "gamma1.2"]
         newly_gen = len(mods) * num_patches
-
         train_x, train_y, val_x, val_y = self.shuffle_data()
         train_shape = (len(train_x)*newly_gen, patch_sz, patch_sz, 3)
         val_shape = (len(val_x)*newly_gen, patch_sz, patch_sz, 3)
@@ -199,7 +196,6 @@ class CIDDataset():
             sind = i*newly_gen
             eind = sind+newly_gen
             h5train_file["patches"][sind:eind, ...] = patches
-            break
         h5train_file.close()
 
     def single_patch_dataset(self, output_folder):
@@ -225,7 +221,6 @@ class CIDDataset():
         h5train_file.create_dataset("labels", data=np.array(train_y))
         for i, filepath in enumerate(train_x):
             h5train_file["patches"][i, ...] = self.center_patch(filepath)
-            print(filepath)
         h5train_file.close()
 
         # Parallel(n_jobs=4)(delayed(self.patches_from_img)(filepath, 3) for
@@ -238,7 +233,7 @@ class CIDDataset():
 if __name__ == "__main__":
     dataset = CIDDataset("data/vanilla/train")
     dataset.aug_patch_dataset("data/aug_patch")
-    # dataset.single_patch_dataset("data/single_patch")
+    #dataset.single_patch_dataset("data/single_patch")
 
     # a = SinglePatchDataset("data/single_patch/train.hdf5", 16)
     # x, y = a[4]

@@ -63,9 +63,9 @@ class PretrainedNNs:
                                  validation_steps=len(self.val_dataset),
                                  callbacks=[checkpointer, tensorboard, rlrop])
 
-        for layer in self.model.layers[:284]:
+        for layer in self.model.layers[:150]:
             layer.trainable=False
-        for layer in self.model.layers[284:]:
+        for layer in self.model.layers[150:]:
             layer.trainable=True
 
         # Fine tune
@@ -79,12 +79,12 @@ class PretrainedNNs:
     def get_resnet(self):
         self.model_name = "resnet"
         base_model = ResNet50(weights='imagenet', include_top=False,
-                              input_shape=self.data_shape)
+                              input_shape=[512, 512, 3])
         for layer in base_model.layers:
             print(layer.name)
             layer.trainable = False
 
-        outputs = base_model.outputs
+        outputs = base_model.output
         x = Flatten()(outputs)
         x = Dense(1024, activation='relu')(x)
         x = Dense(10, activation='softmax')(x)
@@ -108,7 +108,7 @@ class PretrainedNNs:
         for layer in base_model.layers:
             layer.trainable = False
 
-        outputs = base_model.outputs
+        outputs = base_model.output
         x = Flatten()(outputs)
         x = Dense(1024, activation='relu')(x)
         x = Dense(10, activation='softmax')(x)
@@ -124,11 +124,11 @@ class PretrainedNNs:
 
 
 if __name__ == "__main__":
-    train_gen = AugPatchDataset("data/aug_patch/train.hdf5", 1)
-    val_gen = AugPatchDataset("data/aug_patch/val.hdf5", 1)
+    train_gen = AugPatchDataset("data/aug_patch/train.hdf5", 16)
+    val_gen = AugPatchDataset("data/aug_patch/val.hdf5", 16)
+    #train_gen = SinglePatchDataset("data/single_patch/train.hdf5", 16)
+    #val_gen = SinglePatchDataset("data/single_patch/val.hdf5", 16)
     model = PretrainedNNs(train_gen, val_gen, "resnet")
     model.train()
-    # train_gen = SinglePatchDataset("data/single_patch/train.hdf5", 2)
-    # val_gen = SinglePatchDataset("data/single_patch/val.hdf5", 2)
     # model = SimpleNN(train_gen, val_gen, "fcn")
     # model.train()
