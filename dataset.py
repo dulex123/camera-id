@@ -33,9 +33,11 @@ from keras.utils import Sequence
 class AugPatchDataset(Sequence):
     def __init__(self, hdf5_filepath, batch_size):
         self.h5file = h5py.File(hdf5_filepath, "r")
+        self.hdf5_filepath=hdf5_filepath
         self.num_class = 10
         self.batch_size = batch_size
         self.num = self.h5file["patches"].shape[0]
+        self.h5file.close()
         # self.hdf5_train_indxs = [x for x in range(self.num)]
         # shuffle(self.hdf5_train_indxs)
         # print(self.hdf5_train_indxs)
@@ -52,8 +54,10 @@ class AugPatchDataset(Sequence):
     def __getitem__(self, idx):
         start = idx*self.batch_size
         end = (idx+1)*self.batch_size
-        batch_x = self.h5file["patches"][start:end, ...]/255
-        batch_y = self.one_hot(self.h5file["labels"][start:end])
+        h5file = h5py.File(self.hdf5_filepath, "r")
+        batch_x = h5file["patches"][start:end, ...]/255
+        batch_y = self.one_hot(h5file["labels"][start:end])
+        h5file.close()
         return batch_x, batch_y
 
     def on_epoch_end(self):
@@ -263,11 +267,11 @@ class CIDDataset():
 
 if __name__ == "__main__":
     #dataset = CIDDataset("data/vanilla/train")
-    #dataset.aug_patch_dataset("data/test")
-
+    #dataset.aug_patch_dataset("data/aug_patch")
     #dataset.single_patch_dataset("data/single_patch")
     #SinglePatchDataset("data/single_patch/train.hdf5", 16)
-    # a = AugPatchDataset("data/test/val.hdf5", 16)
+    a = AugPatchDataset("data/aug_patch/train.hdf5", 16)
+    print(a[len(a)-1][0].shape)
     # import matplotlib.pyplot as plt
     # for img in range(a[2][0].shape[0]):
     #     plt.imshow(a[3][0][img])
