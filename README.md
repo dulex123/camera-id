@@ -32,7 +32,7 @@ mv train ../data/
 ```
 # Install requirements
 sudo apt-get install libturbojpeg
-sudo pip3 install cffi tqdm
+sudo pip3 install cffi tqdm jpeg4py
 ```
 ## Usage
 
