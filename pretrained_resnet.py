@@ -59,6 +59,8 @@ class PretrainedNNs:
 
         # Train head
         self.model.fit_generator(self.dataset, len(self.dataset), epochs=25,
+                                 use_multiprocessing=True, workers=4,
+                                 max_queue_size=8,
                                  validation_data=self.val_dataset,
                                  validation_steps=len(self.val_dataset),
                                  callbacks=[checkpointer, tensorboard, rlrop])
@@ -86,10 +88,12 @@ class PretrainedNNs:
 
         outputs = base_model.output
         x = Flatten()(outputs)
+        x = Dropout(0.4)(x)
         x = Dense(1024, activation='relu')(x)
+        x = Dropout(0.5)(x)
         x = Dense(10, activation='softmax')(x)
         model = Model(inputs=base_model.inputs, outputs=x)
-        optimizer = RMSprop(lr=0.001)
+        optimizer = RMSprop(lr=0.0001)
         model.compile(loss='categorical_crossentropy',
                       optimizer=optimizer,
                       metrics=['accuracy'])
@@ -124,8 +128,8 @@ class PretrainedNNs:
 
 
 if __name__ == "__main__":
-    train_gen = AugPatchDataset("data/aug_patch/train.hdf5", 16)
-    val_gen = AugPatchDataset("data/aug_patch/val.hdf5", 16)
+    train_gen = AugPatchDataset("data/aug_patch/train.hdf5", 128)
+    val_gen = AugPatchDataset("data/aug_patch/val.hdf5", 128)
     #train_gen = SinglePatchDataset("data/single_patch/train.hdf5", 16)
     #val_gen = SinglePatchDataset("data/single_patch/val.hdf5", 16)
     model = PretrainedNNs(train_gen, val_gen, "resnet")
