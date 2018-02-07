@@ -3,14 +3,15 @@ import os
 import keras
 from keras.optimizers import Adam
 from keras.models import Sequential
-from dataset import SinglePatchDataset
+from dataset import SinglePatchDataset, DerivOutDataset
 from keras.callbacks import ModelCheckpoint, ReduceLROnPlateau
 from keras.layers import Convolution2D, MaxPooling2D, Dropout, Flatten, Dense
 
 
 class SimpleNN():
     def __init__(self, dataset, val_dataset, model_type):
-        self.data_shape = (512, 512, 3)
+        # self.data_shape = (512, 512, 3)
+        self.data_shape = (2, 2, 2048)
         self.dataset = dataset
         self.val_dataset = val_dataset
         self.model_name = ""
@@ -44,10 +45,11 @@ class SimpleNN():
             write_graph=True,
             write_images=False)
 
-        self.model.fit_generator(self.dataset, len(self.dataset), epochs=25,
+        self.model.fit_generator(self.dataset, len(self.dataset), epochs=100,
                                  validation_data=self.val_dataset,
                                  validation_steps=len(self.val_dataset),
-                                 callbacks=[checkpointer, tensorboard, rlrop])
+                                 callbacks=[checkpointer, tensorboard])#,
+        # rlrop])
 
     def get_cnn(self):
         self.model_name = "SimpleCNN"
@@ -72,11 +74,13 @@ class SimpleNN():
         return model
 
     def get_fcn(self):
-        self.model_name = "SimpleFCN"
+        self.model_name = "SimpleFCNDerived"
         model = Sequential()
         model.add(Flatten(input_shape=self.data_shape))
         model.add(Dense(128, activation='relu'))
+        model.add(Dropout(0.3))
         model.add(Dense(64, activation='relu'))
+        model.add(Dropout(0.4))
         model.add(Dense(10, activation='softmax'))
         optimizer=Adam(lr=0.00001)
         model.compile(loss='categorical_crossentropy',
@@ -89,7 +93,9 @@ class SimpleNN():
 
 
 if __name__ == "__main__":
-    train_gen = SinglePatchDataset("data/single_patch/train.hdf5", 16)
-    val_gen = SinglePatchDataset("data/single_patch/val.hdf5", 16)
+    # train_gen = SinglePatchDataset("data/single_patch/train.hdf5", 16)
+    # val_gen = SinglePatchDataset("data/single_patch/val.hdf5", 16)
+    train_gen = DerivOutDataset("data/deriv_outs/train.hdf5", 16)
+    val_gen = DerivOutDataset("data/deriv_outs/val.hdf5", 16)
     model = SimpleNN(train_gen, val_gen, "fcn")
     model.train()

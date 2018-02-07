@@ -9,35 +9,60 @@ import jpeg4py as jpeg
 import tqdm as tqdm
 
 from PIL import Image
+from keras.applications import ResNet50, InceptionV3, DenseNet121
+from keras.engine import Model
 from skimage import exposure
 from keras.utils import Sequence
 
-# class CIFAR10Sequence(Sequenclass CIFAR10Sequence(Sequence):
-#
-#     def __init__(self, x_set, y_set, batch_size):
-#         self.x, self.y = x_set, y_set
-#         self.batch_size = batch_size
-#
-#     def __len__(self):
-#         return math.ceil(len(self.x) / self.batch_size)
-#
-#     def __getitem__(self, idx):
-#         batch_x = self.x[idx * self.batch_size:(idx + 1) * self.batch_size]
-#         batch_y = self.y[idx * self.batch_size:(idx + 1) * self.batch_size]
-#
-#         return np.array([
-#             resize(imread(file_name), (200, 200))
-#                for file_name in batch_x]), np.array(batch_y)
+
+class DerivOutDataset(Sequence):
+    def __init__(self, hdf5_filepath, batch_size, use_one_hot=True):
+        self.hdf5_filepath=hdf5_filepath
+        self.h5file = h5py.File(hdf5_filepath, "r")
+        self.num_class = 10
+        self.batch_size = batch_size
+        self.num = self.h5file["patches"].shape[0]
+        self.labels = self.h5file["labels"]
+        self.h5file.close()
+        self.use_one_hot=use_one_hot
+
+    def __len__(self):
+        return self.num // self.batch_size
+
+    def get_labels(self):
+        return self.labels
+
+    def one_hot(self, batch_y):
+        one_hot_y = np.zeros((self.batch_size, self.num_class))
+        one_hot_y[np.arange(self.batch_size), batch_y] = 1
+        return one_hot_y
+
+    def __getitem__(self, idx):
+        start = idx*self.batch_size
+        end = (idx+1)*self.batch_size
+        h5file = h5py.File(self.hdf5_filepath, "r")
+        batch_x = h5file["patches"][start:end, ...]
+        if self.use_one_hot:
+            batch_y = self.one_hot(h5file["labels"][start:end])
+        else:
+            batch_y = h5file["labels"][start:end]
+        h5file.close()
+        return batch_x, batch_y
+
+    def on_epoch_end(self):
+        pass
 
 
 class AugPatchDataset(Sequence):
-    def __init__(self, hdf5_filepath, batch_size):
+    def __init__(self, hdf5_filepath, batch_size, use_one_hot=True):
         self.h5file = h5py.File(hdf5_filepath, "r")
         self.hdf5_filepath=hdf5_filepath
         self.num_class = 10
         self.batch_size = batch_size
         self.num = self.h5file["patches"].shape[0]
+        self.labels = self.h5file["labels"]
         self.h5file.close()
+        self.use_one_hot=use_one_hot
         # self.hdf5_train_indxs = [x for x in range(self.num)]
         # shuffle(self.hdf5_train_indxs)
         # print(self.hdf5_train_indxs)
@@ -45,6 +70,9 @@ class AugPatchDataset(Sequence):
 
     def __len__(self):
         return self.num // self.batch_size
+
+    def get_labels(self):
+        return self.labels
 
     def one_hot(self, batch_y):
         one_hot_y = np.zeros((self.batch_size, self.num_class))
@@ -56,7 +84,10 @@ class AugPatchDataset(Sequence):
         end = (idx+1)*self.batch_size
         h5file = h5py.File(self.hdf5_filepath, "r")
         batch_x = h5file["patches"][start:end, ...]/255
-        batch_y = self.one_hot(h5file["labels"][start:end])
+        if self.use_one_hot:
+            batch_y = self.one_hot(h5file["labels"][start:end])
+        else:
+            batch_y = h5file["labels"][start:end]
         h5file.close()
         return batch_x, batch_y
 
@@ -195,10 +226,178 @@ class CIDDataset():
 
         return patches
 
+    def guillotine_dataset(self, output_folder):
+        """
+        Creates a dataset by inference through a resnet, inceptionnet and
+        densenet model. Output of a model is used as input data in some
+        other model, saving a lot of computation in the process of training
+        the second stage model.
+
+        Parameters
+        ----------
+        output_folder : string
+            Folder where train.hdf5 and val.hdf5 will be saved
+        """
+
+        # ResNet
+        base_res = ResNet50(weights='imagenet', include_top=False,
+                              input_shape=[512, 512, 3])
+        res_outputs = base_res.output
+        res_model = Model(inputs=base_res.inputs, outputs=res_outputs)
+
+
+        # Inception net
+        base_incept = InceptionV3(weights='imagenet', include_top=False,
+                                     input_shape=[512, 512, 3])
+        incept_outputs = base_incept.output
+        incept_model = Model(inputs=base_incept.inputs, outputs=incept_outputs)
+
+
+        # DenseNet
+        base_dense = DenseNet121(include_top=False,
+                                  input_shape=[512, 512, 3])
+        dense_outputs = base_dense.output
+        dense_model = Model(inputs=base_dense.inputs, outputs=dense_outputs)
+
+
+
+        val_gen = AugPatchDataset("data/aug_patch/val.hdf5", 16,
+                                  use_one_hot=False)
+
+        val_res_shape = (len(val_gen)*16, 2, 2, 2048)
+        val_incept_shape = (len(val_gen)*16, 14, 14, 2048)
+        val_dense_shape = (len(val_gen)*16, 16, 16, 1024)
+
+        h5val_file = h5py.File(os.path.join(output_folder, "val.hdf5"))
+        h5val_file.create_dataset("res_patches", val_res_shape, np.float32)
+        h5val_file.create_dataset("incept_patches", val_incept_shape,
+                                  np.float32)
+        h5val_file.create_dataset("dense_patches", val_dense_shape, np.float32)
+
+        out_labels = []
+        for i in range(len(val_gen)):
+            batch, labels = val_gen[i]
+            res_out = res_model.predict(batch)
+            incept_out = incept_model.predict(batch)
+            dense_out = dense_model.predict(batch)
+            sind = i*16
+            eind = sind+16
+            h5val_file["res_patches"][sind:eind, ...] = res_out
+            h5val_file["incept_patches"][sind:eind, ...] = incept_out
+            h5val_file["dense_patches"][sind:eind, ...] = dense_out
+            out_labels.append(labels)
+        h5val_file.create_dataset("labels", data=np.array(out_labels).flatten())
+        h5val_file.close()
+
+        train_gen = AugPatchDataset("data/aug_patch/train.hdf5", 16,
+                                  use_one_hot=False)
+
+        train_res_shape = (len(train_gen)*16, 2, 2, 2048)
+        train_incept_shape = (len(train_gen)*16, 14, 14, 2048)
+        train_dense_shape = (len(train_gen)*16, 16, 16, 1024)
+
+        h5val_file = h5py.File(os.path.join(output_folder, "train.hdf5"))
+        h5val_file.create_dataset("res_patches", train_res_shape, np.float32)
+        h5val_file.create_dataset("incept_patches", train_incept_shape,
+                                  np.float32)
+        h5val_file.create_dataset("dense_patches", train_dense_shape,
+                                  np.float32)
+
+        out_labels = []
+        for i in range(len(train_gen)):
+            batch, labels = train_gen[i]
+            res_out = res_model.predict(batch)
+            incept_out = incept_model.predict(batch)
+            dense_out = dense_model.predict(batch)
+            sind = i*16
+            eind = sind+16
+            h5val_file["res_patches"][sind:eind, ...] = res_out
+            h5val_file["incept_patches"][sind:eind, ...] = incept_out
+            h5val_file["dense_patches"][sind:eind, ...] = dense_out
+            out_labels.append(labels)
+        h5val_file.create_dataset("labels", data=np.array(out_labels).flatten())
+        h5val_file.close()
+
+        # train_gen = AugPatchDataset("data/aug_patch/train.hdf5", 16,
+        #                             use_one_hot=False)
+        #
+        # train_shape = (len(train_gen)*16, 2, 2, 2048)
+        # h5val_file = h5py.File(os.path.join(output_folder, "train.hdf5"))
+        # h5val_file.create_dataset("patches", train_shape, np.float32)
+        # #h5val_file.create_dataset("labels", lab_shape, np.int64)
+        # out_labels = []
+        # for i in range(len(train_gen)):
+        #     batch, labels = train_gen[i]
+        #     out = model.predict(batch)
+        #     sind = i*16
+        #     eind = sind+16
+        #     h5val_file["patches"][sind:eind, ...] = out
+        #     out_labels.append(labels)
+        #     # h5val_file["labels"][sind:eind, ...] = np.array(labels)
+        # h5val_file.create_dataset("labels", data=np.array(out_labels).flatten())
+        # h5val_file.close()
+        # return model
+
+    def headless_resnet_dataset(self, output_folder):
+        """
+        Creates a dataset by inference through a resnet model. Output of a
+        model is
+        used as input data in some other model, saving a lot of computation
+        in the process of training the second stage model.
+
+        Parameters
+        ----------
+        output_folder : string
+            Folder where train.hdf5 and val.hdf5 will be saved
+        """
+        self.model_name = "headless_resnet"
+        base_model = ResNet50(weights='imagenet', include_top=False,
+                              input_shape=[512, 512, 3])
+        outputs = base_model.output
+        model = Model(inputs=base_model.inputs, outputs=outputs)
+
+        val_gen = AugPatchDataset("data/aug_patch/val.hdf5", 16,
+                                  use_one_hot=False)
+
+        val_shape = (len(val_gen)*16, 2, 2, 2048)
+        h5val_file = h5py.File(os.path.join(output_folder, "val.hdf5"))
+        h5val_file.create_dataset("patches", val_shape, np.float32)
+
+        out_labels = []
+        for i in range(len(val_gen)):
+            batch, labels = val_gen[i]
+            out = model.predict(batch)
+            sind = i*16
+            eind = sind+16
+            h5val_file["patches"][sind:eind, ...] = out
+            out_labels.append(labels)
+        h5val_file.create_dataset("labels", data=np.array(out_labels).flatten())
+        h5val_file.close()
+
+        train_gen = AugPatchDataset("data/aug_patch/train.hdf5", 16,
+                                  use_one_hot=False)
+
+        train_shape = (len(train_gen)*16, 2, 2, 2048)
+        h5val_file = h5py.File(os.path.join(output_folder, "train.hdf5"))
+        h5val_file.create_dataset("patches", train_shape, np.float32)
+        #h5val_file.create_dataset("labels", lab_shape, np.int64)
+        out_labels = []
+        for i in range(len(train_gen)):
+            batch, labels = train_gen[i]
+            out = model.predict(batch)
+            sind = i*16
+            eind = sind+16
+            h5val_file["patches"][sind:eind, ...] = out
+            out_labels.append(labels)
+            # h5val_file["labels"][sind:eind, ...] = np.array(labels)
+        h5val_file.create_dataset("labels", data=np.array(out_labels).flatten())
+        h5val_file.close()
+        return model
+
     def aug_patch_dataset(self, output_folder):
         patch_sz = 512
-        num_patches = 7
-        mods = ["original", "gamma0.8", "gamma1.2", "jpg70", "jpg90"]
+        num_patches = 5
+        mods = ["original"] #, "gamma0.8", "gamma1.2", "jpg70", "jpg90"]
         newly_gen = len(mods) * num_patches
         train_x, train_y, val_x, val_y = self.shuffle_data()
         train_shape = (len(train_x)*newly_gen, patch_sz, patch_sz, 3)
@@ -266,12 +465,14 @@ class CIDDataset():
 
 
 if __name__ == "__main__":
-    #dataset = CIDDataset("data/vanilla/train")
-    #dataset.aug_patch_dataset("data/aug_patch")
+    dataset = CIDDataset("data/vanilla/train")
+    # dataset.aug_patch_dataset("data/aug_patch")
+    # dataset.headless_resnet_dataset("data/deriv_outs")
+    dataset.guillotine_dataset("data/guillotine")
     #dataset.single_patch_dataset("data/single_patch")
+
     #SinglePatchDataset("data/single_patch/train.hdf5", 16)
-    a = AugPatchDataset("data/aug_patch/train.hdf5", 16)
-    print(a[len(a)-1][0].shape)
+    # a = AugPatchDataset("data/aug_patch/train.hdf5", 16)
     # import matplotlib.pyplot as plt
     # for img in range(a[2][0].shape[0]):
     #     plt.imshow(a[3][0][img])

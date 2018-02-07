@@ -78,6 +78,15 @@ class PretrainedNNs:
                                  validation_steps=len(self.val_dataset),
                                  callbacks=[checkpointer, tensorboard, rlrop])
 
+    def generate_derivative_dataset(self):
+        for batch, _ in self.dataset:
+            res = self.model.predict(batch)
+            print(res.shape)
+            break
+
+
+
+
     def get_resnet(self):
         self.model_name = "resnet"
         base_model = ResNet50(weights='imagenet', include_top=False,
@@ -99,10 +108,6 @@ class PretrainedNNs:
                       metrics=['accuracy'])
 
         return model
-        # decode the results into a list of tuples (class, description, probability)
-        # (one such list for each sample in the batch)
-        # print('Predicted:', decode_predictions(preds, top=3)[0])
-        # Predicted: [(u'n02504013', u'Indian_elephant', 0.82658225), (u'n01871265', u'tusker', 0.1122357), (u'n02504458', u'African_elephant', 0.061040461)]
 
     def get_inceptionNet(self):
         self.model_name = "inceptionNet"
@@ -128,11 +133,11 @@ class PretrainedNNs:
 
 
 if __name__ == "__main__":
-    train_gen = AugPatchDataset("data/aug_patch/train.hdf5", 128)
-    val_gen = AugPatchDataset("data/aug_patch/val.hdf5", 128)
-    #train_gen = SinglePatchDataset("data/single_patch/train.hdf5", 16)
-    #val_gen = SinglePatchDataset("data/single_patch/val.hdf5", 16)
-    model = PretrainedNNs(train_gen, val_gen, "resnet")
-    model.train()
+    #train_gen = AugPatchDataset("data/aug_patch/train.hdf5", 128)
+    #val_gen = AugPatchDataset("data/aug_patch/val.hdf5", 128)
+    train_gen = SinglePatchDataset("data/single_patch/train.hdf5", 16)
+    val_gen = SinglePatchDataset("data/single_patch/val.hdf5", 16)
+    model = PretrainedNNs(train_gen, val_gen, "headless_resnet")
+    model.generate_derivative_dataset()
     # model = SimpleNN(train_gen, val_gen, "fcn")
     # model.train()
