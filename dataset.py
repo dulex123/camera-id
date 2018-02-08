@@ -15,6 +15,49 @@ from skimage import exposure
 from keras.utils import Sequence
 
 
+class GuillotineDataset(Sequence):
+    def __init__(self, hdf5_filepath, batch_size, use_one_hot=True):
+        self.hdf5_filepath=hdf5_filepath
+        self.h5file = h5py.File(hdf5_filepath, "r")
+        self.num_class = 10
+        self.batch_size = batch_size
+        self.num = self.h5file["res_patches"].shape[0]
+        self.labels = self.h5file["labels"]
+        self.h5file.close()
+        self.use_one_hot = use_one_hot
+
+    def __len__(self):
+        return self.num // self.batch_size
+
+    def get_labels(self):
+        return self.labels
+
+    def one_hot(self, batch_y):
+        one_hot_y = np.zeros((self.batch_size, self.num_class))
+        one_hot_y[np.arange(self.batch_size), batch_y] = 1
+        return one_hot_y
+
+    def __getitem__(self, idx):
+        start = idx*self.batch_size
+        end = (idx+1)*self.batch_size
+        h5file = h5py.File(self.hdf5_filepath, "r")
+        res_batch = h5file["res_patches"][start:end, ...]
+        incept_batch = h5file["incept_patches"][start:end, ...]
+        dense_batch = h5file["dense_patches"][start:end, ...]
+        batch_y = self.one_hot(h5file["labels"][start:end])
+        h5file.close()
+
+        res_batch = res_batch.reshape(self.batch_size, -1)
+        incept_batch = incept_batch.reshape(self.batch_size, -1)
+        dense_batch = dense_batch.reshape(self.batch_size, -1)
+
+        batch_x = np.concatenate((res_batch, incept_batch, dense_batch), axis=1)
+
+        return batch_x, batch_y
+
+    def on_epoch_end(self):
+        pass
+
 class DerivOutDataset(Sequence):
     def __init__(self, hdf5_filepath, batch_size, use_one_hot=True):
         self.hdf5_filepath=hdf5_filepath
@@ -139,8 +182,7 @@ class CIDDataset():
             self.categories[label] = os.path.basename(root)
             label += 1
 
-        #print(self.categories)
-        #print(self.x_filenames)
+        print(self.categories)
         self.i = 0
 
     def center_patch(self, filepath, patch_sz=512):
@@ -261,35 +303,36 @@ class CIDDataset():
 
 
 
-        val_gen = AugPatchDataset("data/aug_patch/val.hdf5", 16,
-                                  use_one_hot=False)
+        # val_gen = AugPatchDataset("data/aug_patch/val.hdf5", 16,
+        #                           use_one_hot=False)
+        #
+        # val_res_shape = (len(val_gen)*16, 2, 2, 2048)
+        # val_incept_shape = (len(val_gen)*16, 14, 14, 2048)
+        # val_dense_shape = (len(val_gen)*16, 16, 16, 1024)
+        #
+        # h5val_file = h5py.File(os.path.join(output_folder, "val.hdf5"))
+        # h5val_file.create_dataset("res_patches", val_res_shape, np.float32)
+        # h5val_file.create_dataset("incept_patches", val_incept_shape,
+        #                           np.float32)
+        # h5val_file.create_dataset("dense_patches", val_dense_shape, np.float32)
+        #
+        # out_labels = []
+        # for i in range(len(val_gen)):
+        #     batch, labels = val_gen[i]
+        #     res_out = res_model.predict(batch)
+        #     incept_out = incept_model.predict(batch)
+        #     dense_out = dense_model.predict(batch)
+        #     sind = i*16
+        #     eind = sind+16
+        #     h5val_file["res_patches"][sind:eind, ...] = res_out
+        #     h5val_file["incept_patches"][sind:eind, ...] = incept_out
+        #     h5val_file["dense_patches"][sind:eind, ...] = dense_out
+        #     out_labels.append(labels)
+        # h5val_file.create_dataset("labels", data=np.array(out_labels).flatten())
+        # h5val_file.close()
 
-        val_res_shape = (len(val_gen)*16, 2, 2, 2048)
-        val_incept_shape = (len(val_gen)*16, 14, 14, 2048)
-        val_dense_shape = (len(val_gen)*16, 16, 16, 1024)
-
-        h5val_file = h5py.File(os.path.join(output_folder, "val.hdf5"))
-        h5val_file.create_dataset("res_patches", val_res_shape, np.float32)
-        h5val_file.create_dataset("incept_patches", val_incept_shape,
-                                  np.float32)
-        h5val_file.create_dataset("dense_patches", val_dense_shape, np.float32)
-
-        out_labels = []
-        for i in range(len(val_gen)):
-            batch, labels = val_gen[i]
-            res_out = res_model.predict(batch)
-            incept_out = incept_model.predict(batch)
-            dense_out = dense_model.predict(batch)
-            sind = i*16
-            eind = sind+16
-            h5val_file["res_patches"][sind:eind, ...] = res_out
-            h5val_file["incept_patches"][sind:eind, ...] = incept_out
-            h5val_file["dense_patches"][sind:eind, ...] = dense_out
-            out_labels.append(labels)
-        h5val_file.create_dataset("labels", data=np.array(out_labels).flatten())
-        h5val_file.close()
-
-        train_gen = AugPatchDataset("data/aug_patch/train.hdf5", 16,
+        train_gen = AugPatchDataset(
+            "/home/dusan/Desktop/aug_patch/train.hdf5", 16,
                                   use_one_hot=False)
 
         train_res_shape = (len(train_gen)*16, 2, 2, 2048)
@@ -304,7 +347,9 @@ class CIDDataset():
                                   np.float32)
 
         out_labels = []
+        print(len(train_gen))
         for i in range(len(train_gen)):
+            print(i)
             batch, labels = train_gen[i]
             res_out = res_model.predict(batch)
             incept_out = incept_model.predict(batch)
@@ -317,26 +362,6 @@ class CIDDataset():
             out_labels.append(labels)
         h5val_file.create_dataset("labels", data=np.array(out_labels).flatten())
         h5val_file.close()
-
-        # train_gen = AugPatchDataset("data/aug_patch/train.hdf5", 16,
-        #                             use_one_hot=False)
-        #
-        # train_shape = (len(train_gen)*16, 2, 2, 2048)
-        # h5val_file = h5py.File(os.path.join(output_folder, "train.hdf5"))
-        # h5val_file.create_dataset("patches", train_shape, np.float32)
-        # #h5val_file.create_dataset("labels", lab_shape, np.int64)
-        # out_labels = []
-        # for i in range(len(train_gen)):
-        #     batch, labels = train_gen[i]
-        #     out = model.predict(batch)
-        #     sind = i*16
-        #     eind = sind+16
-        #     h5val_file["patches"][sind:eind, ...] = out
-        #     out_labels.append(labels)
-        #     # h5val_file["labels"][sind:eind, ...] = np.array(labels)
-        # h5val_file.create_dataset("labels", data=np.array(out_labels).flatten())
-        # h5val_file.close()
-        # return model
 
     def headless_resnet_dataset(self, output_folder):
         """
@@ -468,8 +493,12 @@ if __name__ == "__main__":
     dataset = CIDDataset("data/vanilla/train")
     # dataset.aug_patch_dataset("data/aug_patch")
     # dataset.headless_resnet_dataset("data/deriv_outs")
-    dataset.guillotine_dataset("data/guillotine")
-    #dataset.single_patch_dataset("data/single_patch")
+    # dataset.guillotine_dataset("data/guillotine")
+    # dataset.single_patch_dataset("data/single_patch")
+
+    #a = GuillotineDataset("data/guillotine/val.hdf5", 1)
+    #b = a[0]
+
 
     #SinglePatchDataset("data/single_patch/train.hdf5", 16)
     # a = AugPatchDataset("data/aug_patch/train.hdf5", 16)

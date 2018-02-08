@@ -3,7 +3,7 @@ import os
 import keras
 from keras.optimizers import Adam
 from keras.models import Sequential
-from dataset import SinglePatchDataset, DerivOutDataset
+from dataset import SinglePatchDataset, GuillotineDataset
 from keras.callbacks import ModelCheckpoint, ReduceLROnPlateau
 from keras.layers import Convolution2D, MaxPooling2D, Dropout, Flatten, Dense
 
@@ -11,7 +11,8 @@ from keras.layers import Convolution2D, MaxPooling2D, Dropout, Flatten, Dense
 class SimpleNN():
     def __init__(self, dataset, val_dataset, model_type):
         # self.data_shape = (512, 512, 3)
-        self.data_shape = (2, 2, 2048)
+        # self.data_shape = (2, 2, 2048)
+        self.data_shape = (671744,)
         self.dataset = dataset
         self.val_dataset = val_dataset
         self.model_name = ""
@@ -74,12 +75,12 @@ class SimpleNN():
         return model
 
     def get_fcn(self):
-        self.model_name = "SimpleFCNDerived"
+        self.model_name = "SimpleFCNGuillotine"
         model = Sequential()
-        model.add(Flatten(input_shape=self.data_shape))
-        model.add(Dense(128, activation='relu'))
+        #model.add(Flatten(input_shape=self.data_shape))
+        model.add(Dense(128, activation='relu', input_shape=self.data_shape))
         model.add(Dropout(0.3))
-        model.add(Dense(64, activation='relu'))
+        model.add(Dense(32, activation='relu'))
         model.add(Dropout(0.4))
         model.add(Dense(10, activation='softmax'))
         optimizer=Adam(lr=0.00001)
@@ -95,7 +96,10 @@ class SimpleNN():
 if __name__ == "__main__":
     # train_gen = SinglePatchDataset("data/single_patch/train.hdf5", 16)
     # val_gen = SinglePatchDataset("data/single_patch/val.hdf5", 16)
-    train_gen = DerivOutDataset("data/deriv_outs/train.hdf5", 16)
-    val_gen = DerivOutDataset("data/deriv_outs/val.hdf5", 16)
+    # train_gen = DerivOutDataset("data/deriv_outs/train.hdf5", 16)
+    # val_gen = DerivOutDataset("data/deriv_outs/val.hdf5", 16)
+    train_gen = GuillotineDataset("data/guillotine/train.hdf5", 16)
+    val_gen = GuillotineDataset("data/guillotine/val.hdf5", 16)
+
     model = SimpleNN(train_gen, val_gen, "fcn")
     model.train()
